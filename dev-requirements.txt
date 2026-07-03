@@ -1,0 +1,8 @@
+-r requirements.txt
+jupyter>=1.0
+ipykernel>=6.25
+pytest>=7.4
+pytest-cov>=4.1
+playwright>=1.40
+nbconvert>=7.10
+markdown>=3.5
