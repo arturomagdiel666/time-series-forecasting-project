@@ -1,8 +1,4 @@
+# Development dependencies (testing). Install on top of runtime deps.
 -r requirements.txt
-jupyter>=1.0
-ipykernel>=6.25
-pytest>=7.4
-pytest-cov>=4.1
-playwright>=1.40
-nbconvert>=7.10
-markdown>=3.5
+pytest==9.1.1
+pytest-cov==7.1.0
