@@ -6,7 +6,7 @@ Short-horizon (next-hour and next-day) forecasting of household electricity dema
 ![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 ![Python](https://img.shields.io/badge/Python-3.12-blue.svg)
 
-**Live dashboard:** `<RAILWAY_URL — add after deploy>`
+**Live dashboard:** `<https://web-production-53f1f.up.railway.app/>`
 
 **Stack:** pandas · scikit-learn · statsmodels · XGBoost · PyTorch · MLflow · Streamlit · Plotly · pytest · GitHub Actions.
 
