@@ -21,6 +21,36 @@ TARGET = "Global_active_power"
 HOURLY_FREQ = "h"
 SEASONAL_PERIOD = 24
 
+# Best XGBoost hyperparameters from the Phase 13 randomized search; reused here
+# so the next-day model shares the tuned configuration without re-searching.
+TUNED_XGB_PARAMS = {
+    "n_estimators": 221,
+    "max_depth": 6,
+    "learning_rate": 0.03567663137948074,
+    "subsample": 0.8099098641033556,
+    "colsample_bytree": 0.6727299868828402,
+    "min_child_weight": 10,
+    "reg_alpha": 0.007066305219717406,
+    "reg_lambda": 1.092249700165663,
+}
+
+H24_HORIZON = 24
+CALENDAR_FEATURES = [
+    "hour",
+    "dayofweek",
+    "day",
+    "month",
+    "quarter",
+    "is_weekend",
+    "hour_sin",
+    "hour_cos",
+    "dayofweek_sin",
+    "dayofweek_cos",
+    "month_sin",
+    "month_cos",
+    "is_holiday",
+]
+
 # Meter channels are unknown at forecast time and Global_intensity is a near
 # linear proxy of the target, so feeding any of them would leak the answer.
 LEAKING_CHANNELS = [
@@ -211,6 +241,42 @@ def fit_xgboost(
         best_iteration=int(model.best_iteration),
         importances=importances,
     )
+
+
+def build_h24_matrix(df: pd.DataFrame) -> ModelMatrix:
+    """Direct next-day (h=24) design matrix, indexed by the predicted timestamp.
+
+    Each row is aligned to the predicted time tau = t+24: the calendar/cyclical/
+    holiday fields are those of tau (known in advance), while the target lags and
+    rolling stats are shifted forward 24 hours so they carry only values known at
+    the origin t. This alignment is what keeps the next-day forecast leakage-free.
+    """
+    lag_roll = [c for c in df.columns if c.startswith(("lag_", "roll_"))]
+
+    x = df[CALENDAR_FEATURES].copy()
+    for col in lag_roll:
+        x[col] = df[col].shift(H24_HORIZON)  # origin-t (tau-24) values only
+
+    y = df[TARGET]
+    split = df["split"]
+    valid = x.notna().all(axis=1) & y.notna()
+    x, y, split = x[valid], y[valid], split[valid]
+
+    train, test = split == "train", split == "test"
+    return ModelMatrix(
+        X_train=x[train], y_train=y[train], X_test=x[test], y_test=y[test]
+    )
+
+
+def fit_direct_xgboost(
+    matrix: ModelMatrix, params: dict[str, object] = TUNED_XGB_PARAMS, seed: int = 42
+) -> pd.Series:
+    """Fit XGBoost with fixed (tuned) params and predict; used for the h=24 model."""
+    from xgboost import XGBRegressor
+
+    model = XGBRegressor(random_state=seed, n_jobs=-1, **params)
+    model.fit(matrix.X_train, matrix.y_train)
+    return pd.Series(model.predict(matrix.X_test), index=matrix.y_test.index)
 
 
 @dataclass
