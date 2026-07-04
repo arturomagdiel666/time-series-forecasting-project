@@ -1,4 +1,7 @@
-# Development dependencies (testing). Install on top of runtime deps.
+# Development dependencies (testing and notebooks). Install on top of runtime deps.
 -r requirements.txt
 pytest==9.1.1
 pytest-cov==7.1.0
+jupyter==1.1.1
+nbconvert==7.17.1
+ipykernel==7.3.0
