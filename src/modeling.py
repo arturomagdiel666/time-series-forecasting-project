@@ -16,6 +16,10 @@ import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PREDICTIONS_DIR = PROJECT_ROOT / "data" / "processed" / "predictions"
+MODELS_DIR = PROJECT_ROOT / "models"
+BEST_MODEL_PATH = MODELS_DIR / "best_model.pkl"
+BEST_MODEL_H24_PATH = MODELS_DIR / "best_model_h24.pkl"
+METADATA_PATH = MODELS_DIR / "metadata.json"
 
 TARGET = "Global_active_power"
 HOURLY_FREQ = "h"
@@ -337,6 +341,20 @@ def tune_xgboost(
         best_params=search.best_params_,
         cv_mae=float(-search.best_score_),
     )
+
+
+def load_model(path: Path = BEST_MODEL_PATH) -> object:
+    """Load a serialized forecaster; shared by the dashboard and any batch job."""
+    import joblib
+
+    return joblib.load(path)
+
+
+def load_metadata(path: Path = METADATA_PATH) -> dict[str, object]:
+    """Load the model metadata (features, bounds, metrics) as a dict."""
+    import json
+
+    return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
 def save_predictions(
