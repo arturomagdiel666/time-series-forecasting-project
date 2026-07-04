@@ -1,0 +1,13 @@
+# OPTIONAL research add-on — NOT installed by CI or the Railway deploy.
+# Adds Google's TimesFM 2.5 as a zero-shot foundation-model baseline.
+#
+# The main requirements.txt (which CI and Railway install) intentionally does NOT
+# include TimesFM, so the dashboard/tests/deploy stay light. Install this file into
+# the same .venv (Python 3.12) only when (re)running scripts/run_timesfm.py:
+#
+#     pip install -r requirements-timesfm.txt
+#     python scripts/run_timesfm.py
+#
+# This downloads the ~1GB google/timesfm-2.5-200m-pytorch checkpoint to the
+# HuggingFace cache (outside the repo); the checkpoint must never be committed.
+timesfm[torch]==2.0.2

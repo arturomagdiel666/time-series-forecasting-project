@@ -34,3 +34,12 @@ htmlcov/
 # Raw dataset (never commit)
 data/raw/*.txt
 data/raw/*.zip
+
+# TimesFM optional add-on — never commit the checkpoint or any HF cache
+# (the HF cache defaults to ~/.cache/huggingface, outside the repo; these guard
+#  against a repo-local HF_HOME and stray model weights)
+.cache/
+**/.huggingface/
+hf_cache/
+*.safetensors
+*.ckpt
