@@ -131,7 +131,7 @@ def leaderboard() -> pd.DataFrame:
 def show_image(path: Path, caption: str) -> None:
     """Render a figure if it exists; otherwise a tidy placeholder."""
     if path.exists():
-        st.image(str(path), caption=caption, use_container_width=True)
+        st.image(str(path), caption=caption, width="stretch")
     else:
         st.info(f"Figure not available yet: {path.name}")
 
@@ -193,13 +193,13 @@ def page_exploration() -> None:
     fig = px.line(window, labels={"value": "kWh", "timestamp": "time"})
     fig.update_traces(line_width=0.7)
     fig.update_layout(showlegend=False, title="Global active power")
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     col1, col2 = st.columns(2)
     with col1:
         hist = px.histogram(window, nbins=60, title="Distribution")
         hist.update_layout(showlegend=False)
-        st.plotly_chart(hist, use_container_width=True)
+        st.plotly_chart(hist, width="stretch")
     with col2:
         roll = pd.DataFrame(
             {
@@ -209,7 +209,7 @@ def page_exploration() -> None:
             }
         )
         st.plotly_chart(
-            px.line(roll, title="Rolling statistics"), use_container_width=True
+            px.line(roll, title="Rolling statistics"), width="stretch"
         )
 
     frame = pd.DataFrame(
@@ -223,7 +223,7 @@ def page_exploration() -> None:
     grouping = st.selectbox("Boxplot by", ["hour", "day_of_week", "month"])
     st.plotly_chart(
         px.box(frame, x=grouping, y="value", labels={"value": "kWh"}),
-        use_container_width=True,
+        width="stretch",
     )
 
 
@@ -250,7 +250,7 @@ def page_stats() -> None:
             "verdict": [raw.verdict, diff.verdict],
         }
     )
-    st.dataframe(table, use_container_width=True, hide_index=True)
+    st.dataframe(table, width="stretch", hide_index=True)
     st.markdown(
         "The raw series is not cleanly stationary (ADF and KPSS disagree); the "
         "lag-24 seasonal difference is stationary under both tests. **H2 supported.**"
@@ -270,7 +270,7 @@ def page_comparison() -> None:
     board = leaderboard()
 
     st.subheader("Leaderboard (test set)")
-    st.dataframe(board.round(4), use_container_width=True)
+    st.dataframe(board.round(4), width="stretch")
 
     metric = st.selectbox("Metric", ["mae", "rmse", "mape", "smape", "mase"])
     bar = px.bar(
@@ -280,7 +280,7 @@ def page_comparison() -> None:
         color="horizon",
         title=f"{metric.upper()} by model",
     )
-    st.plotly_chart(bar, use_container_width=True)
+    st.plotly_chart(bar, width="stretch")
 
     st.subheader("Actual vs predicted")
     preds = load_predictions()
@@ -301,7 +301,7 @@ def page_comparison() -> None:
         seg = preds[name].loc[week_start:end, "y_pred"]
         fig.add_trace(go.Scatter(x=seg.index, y=seg, name=name, opacity=0.8))
     fig.update_layout(title=f"Week of {pd.Timestamp(week_start).date()}", yaxis_title="kWh")
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     st.subheader("Residual diagnostics")
     which = st.selectbox("Model", ["xgboost_tuned", "sarima", "lstm"])
@@ -351,7 +351,7 @@ def page_playground() -> None:
     fig.add_trace(go.Scatter(x=[tau], y=[pred_h24], name="next-day", mode="markers",
                              marker=dict(size=12, symbol="diamond")))
     fig.update_layout(title=f"Context around {tau}", yaxis_title="kWh")
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
 
 def page_report() -> None:
