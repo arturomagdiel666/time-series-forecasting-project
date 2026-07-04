@@ -157,6 +157,62 @@ def sarima_one_step(fit: SarimaFit, y_test: pd.Series) -> pd.Series:
     return preds.reindex(y_test.index)
 
 
+@dataclass
+class XGBoostFit:
+    """A fitted XGBoost model with its predictions and importances."""
+
+    model: object
+    y_pred: pd.Series
+    best_iteration: int
+    importances: pd.Series
+
+
+def fit_xgboost(
+    matrix: ModelMatrix,
+    val_fraction: float = 0.1,
+    seed: int = 42,
+) -> XGBoostFit:
+    """Fit a gradient-boosted tree on the raw feature matrix.
+
+    Trees split on raw thresholds, so no scaling is applied. Early stopping uses
+    the most recent slice of training as a chronological validation tail, never
+    a random fold, to respect the time order.
+    """
+    from xgboost import XGBRegressor
+
+    cut = int(len(matrix.X_train) * (1 - val_fraction))
+    x_tr, y_tr = matrix.X_train.iloc[:cut], matrix.y_train.iloc[:cut]
+    x_val, y_val = matrix.X_train.iloc[cut:], matrix.y_train.iloc[cut:]
+
+    # Conservative depth and learning rate with subsampling to limit overfitting
+    # on a first, untuned fit; 500 trees give early stopping room to work.
+    model = XGBRegressor(
+        n_estimators=500,
+        max_depth=6,
+        learning_rate=0.05,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        min_child_weight=5,
+        random_state=seed,
+        n_jobs=-1,
+        eval_metric="mae",
+        early_stopping_rounds=30,
+    )
+    model.fit(x_tr, y_tr, eval_set=[(x_val, y_val)], verbose=False)
+
+    y_pred = pd.Series(model.predict(matrix.X_test), index=matrix.y_test.index)
+    importances = pd.Series(
+        model.feature_importances_, index=matrix.features
+    ).sort_values(ascending=False)
+
+    return XGBoostFit(
+        model=model,
+        y_pred=y_pred,
+        best_iteration=int(model.best_iteration),
+        importances=importances,
+    )
+
+
 def save_predictions(
     model_name: str, y_true: pd.Series, y_pred: pd.Series
 ) -> Path:

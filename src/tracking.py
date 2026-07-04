@@ -47,10 +47,15 @@ def log_run(
     model_name: str,
     params: dict[str, object],
     metrics: dict[str, float],
-    predictions: pd.DataFrame,
+    predictions: pd.DataFrame | None,
     artifact_path: Path | None = None,
+    extra_artifacts: list[Path] | None = None,
 ) -> str:
-    """Log one model run: params, all five metrics and the prediction artifact."""
+    """Log one model run: params, all five metrics and its artifacts.
+
+    ``extra_artifacts`` covers per-model outputs such as feature importances or
+    a training curve, kept under a separate MLflow artifact folder.
+    """
     import mlflow
 
     with mlflow.start_run(run_name=model_name) as run:
@@ -59,7 +64,10 @@ def log_run(
         mlflow.log_metrics(metrics)
         if artifact_path is not None and artifact_path.exists():
             mlflow.log_artifact(str(artifact_path), artifact_path="predictions")
-        else:
+        elif predictions is not None:
             # Fall back to logging the frame inline when no file is provided.
             mlflow.log_text(predictions.to_csv(), f"{model_name}_predictions.csv")
+        for extra in extra_artifacts or []:
+            if extra.exists():
+                mlflow.log_artifact(str(extra), artifact_path="diagnostics")
         return run.info.run_id
