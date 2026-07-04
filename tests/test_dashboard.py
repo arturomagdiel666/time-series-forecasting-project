@@ -43,3 +43,11 @@ def test_model_comparison_page_includes_timesfm() -> None:
     board_index = list(app.dataframe[0].value.index)
     assert "timesfm" in board_index
     assert "timesfm_h24" in board_index
+
+
+def test_video_explanation_page_renders() -> None:
+    """The Video Explanation page renders (embedded video or graceful fallback)."""
+    app = AppTest.from_file(str(APP), default_timeout=120)
+    app.run()
+    app.radio[0].set_value("Video Explanation 🎬").run()
+    assert not app.exception

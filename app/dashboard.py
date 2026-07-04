@@ -405,10 +405,17 @@ def page_report() -> None:
 
 def page_video() -> None:
     st.title("Video Explanation 🎬")
-    video_files = sorted((PROJECT_ROOT / "video").glob("*.mp4"))
-    if video_files:
-        st.video(str(video_files[0]))
+    # PROJECT_ROOT-relative so it resolves both locally and on Railway.
+    video_path = PROJECT_ROOT / "video" / "explanation.mp4"
+    if video_path.exists():
+        st.video(str(video_path))
+        st.caption(
+            "**Project overview** — an AI-generated NotebookLM walkthrough (~7 min). "
+            "It covers the methodology, the model comparison, and the TimesFM "
+            "zero-shot foundation-model contamination finding."
+        )
     else:
+        # Graceful fallback so the page never crashes if the asset is absent.
         st.info("A walkthrough video will be added here. Coming soon.")
 
 
