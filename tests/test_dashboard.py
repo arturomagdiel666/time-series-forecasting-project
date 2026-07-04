@@ -31,3 +31,15 @@ def test_statistical_analysis_page_renders_from_artifact() -> None:
     # Content that only appears once the precomputed results are rendered.
     assert "Kruskal-Wallis by hour" in body
     assert "Ljung-Box" in body
+
+
+def test_model_comparison_page_includes_timesfm() -> None:
+    """Model Comparison renders and the leaderboard includes the TimesFM baseline."""
+    app = AppTest.from_file(str(APP), default_timeout=120)
+    app.run()
+    app.radio[0].set_value("Model Comparison ⚖️").run()
+    assert not app.exception
+    # The leaderboard is the first dataframe on the page; both horizons must appear.
+    board_index = list(app.dataframe[0].value.index)
+    assert "timesfm" in board_index
+    assert "timesfm_h24" in board_index

@@ -33,7 +33,7 @@ STATS_ARTIFACT = PROJECT_ROOT / "reports" / "stats_results.json"
 
 TARGET = "Global_active_power"
 
-# Every persisted model forecasts the next hour except the direct h=24 model.
+# Every persisted model forecasts the next hour except the direct h=24 models.
 HORIZONS = {
     "naive_lag1": "h=1",
     "naive_lag24": "h=1",
@@ -43,6 +43,9 @@ HORIZONS = {
     "xgboost": "h=1",
     "xgboost_tuned": "h=1",
     "xgboost_h24": "h=24",
+    # TimesFM 2.5 zero-shot foundation-model baseline (both horizons).
+    "timesfm": "h=1",
+    "timesfm_h24": "h=24",
 }
 
 PAGES = [
@@ -302,6 +305,10 @@ def page_comparison() -> None:
 
     st.subheader("Leaderboard (test set)")
     st.dataframe(board.round(4), width="stretch")
+    st.caption(
+        "`timesfm` / `timesfm_h24` are Google's TimesFM 2.5 (200M) run **zero-shot** — "
+        "a pretrained foundation model applied with no task-specific training on this series."
+    )
 
     metric = st.selectbox("Metric", ["mae", "rmse", "mape", "smape", "mase"])
     bar = px.bar(
