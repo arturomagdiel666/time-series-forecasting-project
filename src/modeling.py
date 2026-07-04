@@ -213,6 +213,66 @@ def fit_xgboost(
     )
 
 
+@dataclass
+class TunedXGBoost:
+    """Result of the randomized XGBoost search."""
+
+    model: object
+    y_pred: pd.Series
+    best_params: dict[str, object]
+    cv_mae: float
+
+
+def tune_xgboost(
+    matrix: ModelMatrix,
+    n_iter: int = 20,
+    n_splits: int = 5,
+    seed: int = 42,
+) -> TunedXGBoost:
+    """Randomized search over XGBoost with expanding-window time-series CV.
+
+    Inner XGBoost runs single-threaded so the search parallelises across the
+    candidate x fold fits without CPU oversubscription. Scoring is neg MAE, the
+    project's primary metric, and the best estimator is refit on full train.
+    """
+    from scipy.stats import randint, uniform
+    from sklearn.model_selection import RandomizedSearchCV, TimeSeriesSplit
+    from xgboost import XGBRegressor
+
+    search_space = {
+        "n_estimators": randint(200, 1000),
+        "max_depth": randint(3, 9),
+        "learning_rate": uniform(0.01, 0.14),
+        "subsample": uniform(0.6, 0.4),
+        "colsample_bytree": uniform(0.6, 0.4),
+        "min_child_weight": randint(1, 11),
+        "reg_alpha": uniform(0.0, 1.0),
+        "reg_lambda": uniform(1.0, 4.0),
+    }
+    base = XGBRegressor(random_state=seed, n_jobs=1)
+    search = RandomizedSearchCV(
+        base,
+        search_space,
+        n_iter=n_iter,
+        scoring="neg_mean_absolute_error",
+        cv=TimeSeriesSplit(n_splits=n_splits),
+        random_state=seed,
+        n_jobs=-1,
+        refit=True,
+    )
+    search.fit(matrix.X_train, matrix.y_train)
+
+    y_pred = pd.Series(
+        search.best_estimator_.predict(matrix.X_test), index=matrix.y_test.index
+    )
+    return TunedXGBoost(
+        model=search.best_estimator_,
+        y_pred=y_pred,
+        best_params=search.best_params_,
+        cv_mae=float(-search.best_score_),
+    )
+
+
 def save_predictions(
     model_name: str, y_true: pd.Series, y_pred: pd.Series
 ) -> Path:
