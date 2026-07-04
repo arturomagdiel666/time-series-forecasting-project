@@ -41,7 +41,10 @@ def smape(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     """Symmetric MAPE (%); the divide-by-zero case collapses to a zero term."""
     y_true, y_pred = _to_array(y_true), _to_array(y_pred)
     denom = np.abs(y_true) + np.abs(y_pred)
-    ratio = np.where(denom == 0, 0.0, np.abs(y_true - y_pred) / denom)
+    # Mask before dividing so a zero denominator never evaluates 0/0.
+    nonzero = denom != 0
+    ratio = np.zeros_like(denom)
+    ratio[nonzero] = np.abs(y_true - y_pred)[nonzero] / denom[nonzero]
     return float(np.mean(2 * ratio) * 100)
 
 
