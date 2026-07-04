@@ -104,12 +104,13 @@ The work follows a 20-phase framework: problem definition, data loading with int
 
 ## 5. Modeling
 
-The roster spans three paradigms of increasing complexity:
+The roster spans three trained paradigms of increasing complexity, plus a zero-shot foundation-model benchmark:
 
 - **Naive baselines** — persistence (lag-1), daily seasonal naive (lag-24), weekly seasonal naive (lag-168). These set the bar every other model must clear.
 - **SARIMA** — `(1,0,1)(1,1,1,24)`. Orders are informed, not searched: `D=1, s=24` follows directly from H2 (stationary after lag-24 differencing); `d=0` because the raw level is already mean-reverting (ADF); `p=q=1` capture short-run intraday autocorrelation; `P=Q=1` model the daily seasonal structure. A full `s=24` fit on ~26k points is impractical, so the model is fit on the most recent ~90 days of training — contiguous with the test period — and forecast one step ahead via the Kalman filter. This window is a documented tractability trade-off.
 - **XGBoost with lag features** — trees split on raw thresholds, so no scaling is applied. Early stopping uses a chronological tail of training, never a random fold.
 - **LSTM** — two layers, hidden size 64, dropout 0.2, a 168-hour lookback mapping to the next hour. The target is standardised with a scaler fit on training data only; training uses Adam (lr 1e-3), batch 256, and early stopping (patience 3, best epoch 5, ~341 s on CPU). Predictions are inverse-transformed before scoring so MAE stays in kWh.
+- **TimesFM 2.5 (zero-shot foundation model)** — Google's 200M-parameter pretrained time-series transformer, applied **zero-shot**: no training or fine-tuning on this series. It receives only the raw hourly target as context (univariate, 1024-hour context, normalised inputs) and forecasts the next hour (step 1) and next day (step 24), using strictly past actuals so the evaluation stays leakage-free. It is an external benchmark — can a general-purpose foundation model rival a small task-specific tree? — and is kept as an optional add-on outside CI and the deploy. Its zero-shot category and a pretraining-contamination caveat are discussed in Section 7.
 
 **Tuning.** XGBoost was tuned with a 20-iteration randomized search over eight hyperparameters using the same expanding-window CV. The gain was marginal — tuned CV MAE 0.3775 versus untuned 0.3780, and tuned test MAE 0.3338 versus 0.3345. The headline finding is that **features, not hyperparameters, drive performance** on this series. SARIMA orders were kept from ACF/PACF and H2; the LSTM architecture was fixed by design, since its role is to test H3 rather than to win.
 
@@ -121,10 +122,11 @@ The roster spans three paradigms of increasing complexity:
 
 ### Test leaderboard
 
-All models scored on the held-out test set (January–November 2010) with the single `src/metrics.py` implementation. MAE is primary; horizon is labelled.
+All models scored on the held-out test set (January–November 2010) with the single `src/metrics.py` implementation. MAE is primary; horizon is labelled. `timesfm` / `timesfm_h24` are a **zero-shot foundation model** (Google TimesFM 2.5, 200M) applied with no training on this series — a different category from the trained models, read with the caveat below.
 
 | Model | Horizon | MAE | RMSE | MAPE | sMAPE | MASE |
 |---|---|---|---|---|---|---|
+| _timesfm_ (zero-shot) | h=1 | _0.2103_ | _0.3051_ | 24.75 | 22.58 | _0.3210_ |
 | **xgboost_tuned** | h=1 | **0.3338** | 0.4823 | 41.92 | 33.31 | 0.5095 |
 | xgboost | h=1 | 0.3345 | 0.4829 | 41.84 | 33.32 | 0.5106 |
 | sarima | h=1 | 0.3594 | 0.5087 | 46.98 | 36.22 | 0.5486 |
@@ -132,9 +134,12 @@ All models scored on the held-out test set (January–November 2010) with the si
 | naive_lag1 | h=1 | 0.3953 | 0.6101 | 44.04 | 36.57 | 0.6034 |
 | naive_lag24 | h=1 | 0.5519 | 0.8139 | 68.16 | 49.45 | 0.8424 |
 | naive_lag168 | h=1 | 0.5841 | 0.8343 | 75.71 | 54.04 | 0.8916 |
+| _timesfm_h24_ (zero-shot) | h=24 | _0.2004_ | _0.2965_ | 23.32 | 21.33 | _0.3059_ |
 | xgboost_h24 | h=24 | 0.4444 | 0.6069 | 61.24 | 44.27 | 0.6784 |
 
-Tuned XGBoost leads at h=1; the day-ahead model, though necessarily less accurate, still beats its lag-24 baseline (MASE 0.678 < 1). Among the naive baselines, lag-1 persistence is clearly the strongest (MAE 0.395 versus 0.552 and 0.584 for the daily and weekly seasonal naives): short-run autocorrelation is so strong at hourly resolution that the last observation is the single best no-model predictor — foreshadowing the dominance of `lag_1` in the feature importances.
+Among the **trained** models, tuned XGBoost leads at h=1; the day-ahead model, though necessarily less accurate, still beats its lag-24 baseline (MASE 0.678 < 1). Among the naive baselines, lag-1 persistence is clearly the strongest (MAE 0.395 versus 0.552 and 0.584 for the daily and weekly seasonal naives): short-run autocorrelation is so strong at hourly resolution that the last observation is the single best no-model predictor — foreshadowing the dominance of `lag_1` in the feature importances.
+
+**On the zero-shot foundation model.** TimesFM 2.5, applied zero-shot, posts the lowest errors in the table (MAE 0.210 at h=1, 0.200 at h=24) — nominally ~37% below tuned XGBoost at h=1 and ~55% below the trained h=24 model. This is a striking headline, but it should be read with strong scepticism rather than as a clean win, for two reasons. First, its accuracy is **essentially flat across horizons** (h=24 MAE 0.200 is even marginally *below* h=1's 0.210), whereas a genuine causal forecaster degrades with horizon — XGBoost goes from 0.334 to 0.444 over the same step-up. A model whose next-day forecast is as good as its next-hour forecast is not behaving like it is extrapolating from context. Second, the UCI household-power series is a **widely mirrored public dataset that is very likely present in TimesFM's pretraining corpus**, so "zero-shot" here may in part be *recall* of a memorised series rather than out-of-sample forecasting — a leakage the trained models cannot enjoy because they only ever saw 2006–2009. The forecaster itself is verified leakage-free (context ends strictly at T−1 / T−24; targets never enter the window), so the effect is upstream, in pretraining. Treated honestly, this is a benchmark curiosity with a contamination asterisk, not evidence that a general foundation model out-forecasts a task-specific tree on unseen data.
 
 ### Cross-validation
 
@@ -191,7 +196,7 @@ The exploratory analysis corroborates the statistical tests: a dominant daily cy
 
 - **Q1 — Can we forecast next-hour and next-day demand?** Yes. Next-hour tuned XGBoost achieves MAE 0.334 kWh (MASE 0.510); the direct next-day model achieves MAE 0.444 kWh (MASE 0.678). Both beat their seasonal-naive baselines.
 - **Q2 — What are the dominant temporal patterns?** A dominant daily cycle (Kruskal-Wallis by hour H = 8842.5), a significant weekly cycle separating weekday from weekend routines (H = 239.3), and an annual component with a winter demand peak. Autocorrelation is significant out to at least 720 lags (Ljung-Box statistics 50757, 196057 and 593902 at lags 24, 168 and 720, all p < 1e-3; computed in `src/stats_tests.py` and reproduced in the executed `01_eda` notebook).
-- **Q3 — Best paradigm versus complexity?** XGBoost wins on both axes: lowest error and lowest cost (seconds to fit, no scaling, CPU-friendly, trivially retrainable). SARIMA is a close second but requires a windowed refit; the LSTM is the most expensive and the weakest of the three. The accuracy-per-unit-complexity winner is the gradient-boosted tree.
+- **Q3 — Best paradigm versus complexity?** Among trained models, XGBoost wins on both axes: lowest error and lowest cost (seconds to fit, no scaling, CPU-friendly, trivially retrainable). SARIMA is a close second but requires a windowed refit; the LSTM is the most expensive and the weakest of the three. The accuracy-per-unit-complexity winner is the gradient-boosted tree. A zero-shot **foundation model** (TimesFM 2.5) was added as an external benchmark: it posts numerically lower test error, but its accuracy is suspiciously flat across horizons and the public UCI series is likely in its pretraining data, so the result probably reflects memorisation rather than genuine forecasting (see Section 6). It is also far costlier at inference — a ~1GB model and ~30 min of CPU scoring versus milliseconds for the tree. On unseen data and under a fixed compute budget, the task-specific tree remains the pragmatic choice.
 
 ### Hypotheses confirmed
 
@@ -210,6 +215,7 @@ The signal is concentrated in recent demand and the calendar, not in exotic mode
 - The dataset is a single household; the model does not generalise to other homes without retraining.
 - No weather or other exogenous regressors were used; temperature in particular would likely improve winter accuracy.
 - The next-day forecast comes from a direct h=24 model only; recursive and multi-output alternatives were not compared.
+- The TimesFM 2.5 zero-shot baseline is not a like-for-like comparison: it is a pretrained foundation model, not trained on this split, and the public UCI series may be contaminated into its pretraining, so its strong numbers likely overstate genuine forecasting skill (its near-constant error across horizons supports this). It is included as a benchmark curiosity, kept as an optional add-on outside CI and the deployment, and should not be read as a trained-model result.
 
 ### Production monitoring (Phase 20)
 
@@ -261,7 +267,7 @@ Found via 20-iteration randomized search with expanding-window `TimeSeriesSplit`
 
 ### F. MLflow run summary
 
-The experiment logs one run per model (three naive baselines, SARIMA, LSTM, untuned and tuned XGBoost, the direct h=24 model), each with parameters, all five metrics, and prediction artifacts, plus per-model cross-validation runs.
+The experiment logs one run per model (three naive baselines, SARIMA, LSTM, untuned and tuned XGBoost, the direct h=24 model), each with parameters, all five metrics, and prediction artifacts, plus per-model cross-validation runs. An optional `timesfm_zeroshot` run logs the zero-shot foundation-model baseline (both horizons); it is produced by `scripts/run_timesfm.py`, which is excluded from CI and the deployment.
 
 ### G. References
 

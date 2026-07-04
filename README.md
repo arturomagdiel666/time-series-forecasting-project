@@ -8,7 +8,7 @@ Short-horizon (next-hour and next-day) forecasting of household electricity dema
 
 **Live dashboard:** `<https://web-production-53f1f.up.railway.app/>`
 
-**Stack:** pandas · scikit-learn · statsmodels · XGBoost · PyTorch · MLflow · Streamlit · Plotly · pytest · GitHub Actions.
+**Stack:** pandas · scikit-learn · statsmodels · XGBoost · PyTorch · MLflow · Streamlit · Plotly · pytest · GitHub Actions · TimesFM 2.5 (optional).
 
 ---
 
@@ -23,7 +23,8 @@ Accurate short-horizon load forecasting underpins grid balancing, demand-respons
 ## 🔧 Engineering highlights
 
 - **Leakage-safe pipeline** — chronological train/test split, `TimeSeriesSplit` expanding-window cross-validation, and lag/rolling features computed only after the split. Contemporaneous meter channels are excluded because `Global_intensity` is a near-linear proxy of the target.
-- **Rigorous evaluation** — MAE-primary alongside RMSE/MAPE/sMAPE/MASE, residual diagnostics, and per-hour/day/month error analysis across 7 models and 2 horizons.
+- **Rigorous evaluation** — MAE-primary alongside RMSE/MAPE/sMAPE/MASE, residual diagnostics, and per-hour/day/month error analysis across 8 models and 2 horizons.
+- **Foundation-model benchmark** — additionally benchmarked against Google's TimesFM 2.5 (200M) foundation model, applied **zero-shot**, as an optional research add-on kept out of CI and the Railway deploy.
 - **Reproducible** — pinned Python 3.12 environment, global seed 42, MLflow experiment tracking, and a 22-test pytest suite that runs in GitHub Actions on synthetic fixtures (never the real dataset).
 - **Deployable** — a 7-page Streamlit + Plotly dashboard that serves the serialized model and deploys to Railway from the committed artifacts alone.
 
@@ -40,6 +41,7 @@ The winner is a tuned XGBoost on causal lag and calendar features. Metrics are o
 
 | Model | MAE | RMSE | MAPE | sMAPE | MASE |
 |---|---|---|---|---|---|
+| _timesfm_ (zero-shot)¹ | _0.2103_ | _0.3051_ | 24.75 | 22.58 | _0.3210_ |
 | **xgboost_tuned** | **0.3338** | 0.4823 | 41.92 | 33.31 | 0.5095 |
 | xgboost | 0.3345 | 0.4829 | 41.84 | 33.32 | 0.5106 |
 | sarima | 0.3594 | 0.5087 | 46.98 | 36.22 | 0.5486 |
@@ -48,7 +50,9 @@ The winner is a tuned XGBoost on causal lag and calendar features. Metrics are o
 | naive_lag24 | 0.5519 | 0.8139 | 68.16 | 49.45 | 0.8424 |
 | naive_lag168 | 0.5841 | 0.8343 | 75.71 | 54.04 | 0.8916 |
 
-The direct next-day (h=24) XGBoost scores MAE 0.4444 / MASE 0.6784 — less accurate than next-hour, as expected, but still well ahead of its seasonal baseline. Hyperparameter tuning moved test MAE only from 0.3345 to 0.3338: on this series, features drive performance, not hyperparameters.
+**xgboost_tuned** is the best **trained** model. The direct next-day (h=24) XGBoost scores MAE 0.4444 / MASE 0.6784 — less accurate than next-hour, as expected, but still well ahead of its seasonal baseline. Hyperparameter tuning moved test MAE only from 0.3345 to 0.3338: on this series, features drive performance, not hyperparameters.
+
+¹ **Zero-shot foundation model** (Google TimesFM 2.5, 200M; `timesfm_h24` scores MAE 0.2004 / MASE 0.3059). It posts the lowest errors, but its accuracy is nearly flat across horizons — unlike a genuine forecaster — and the public UCI series is likely in its pretraining data, so this probably reflects memorisation, not out-of-sample skill. It is an optional research add-on, excluded from CI and the deploy; see the report's Analysis section for the full caveat.
 
 **Hypotheses (all supported):** H1 weekly seasonality (Kruskal-Wallis day-of-week H=239.3, p<1e-40); H2 non-stationary raw, stationary after lag-24 seasonal differencing (ADF/KPSS); H3 trees beat the LSTM in CV (0.378 vs 0.415) and test (0.334 vs 0.371) at a fraction of the compute.
 
