@@ -134,7 +134,7 @@ All models scored on the held-out test set (January–November 2010) with the si
 | naive_lag168 | h=1 | 0.5841 | 0.8343 | 75.71 | 54.04 | 0.8916 |
 | xgboost_h24 | h=24 | 0.4444 | 0.6069 | 61.24 | 44.27 | 0.6784 |
 
-Tuned XGBoost leads at h=1; the day-ahead model, though necessarily less accurate, still beats its lag-24 baseline (MASE 0.678 < 1).
+Tuned XGBoost leads at h=1; the day-ahead model, though necessarily less accurate, still beats its lag-24 baseline (MASE 0.678 < 1). Among the naive baselines, lag-1 persistence is clearly the strongest (MAE 0.395 versus 0.552 and 0.584 for the daily and weekly seasonal naives): short-run autocorrelation is so strong at hourly resolution that the last observation is the single best no-model predictor — foreshadowing the dominance of `lag_1` in the feature importances.
 
 ### Cross-validation
 
@@ -148,6 +148,8 @@ Expanding-window CV on the training set confirms the ranking is not an artefact 
 | naive_lag1 | 0.441 ± 0.039 | |
 | naive_lag168 | 0.610 | |
 | naive_lag24 | 0.634 | |
+
+Note that the two weakest baselines swap order between the test set (lag-24 < lag-168) and cross-validation (lag-168 < lag-24). This is harmless: both are far behind every real model, and the ordering of two poor references carries no bearing on model selection.
 
 ### Actual versus predicted
 
@@ -188,7 +190,7 @@ The exploratory analysis corroborates the statistical tests: a dominant daily cy
 ### Business questions answered
 
 - **Q1 — Can we forecast next-hour and next-day demand?** Yes. Next-hour tuned XGBoost achieves MAE 0.334 kWh (MASE 0.510); the direct next-day model achieves MAE 0.444 kWh (MASE 0.678). Both beat their seasonal-naive baselines.
-- **Q2 — What are the dominant temporal patterns?** A dominant daily cycle (Kruskal-Wallis by hour H = 8842.5), a significant weekly cycle separating weekday from weekend routines (H = 239.3), and an annual component with a winter demand peak. Autocorrelation is significant out to at least 720 lags (Ljung-Box p < 1e-3 at lags 24, 168, 720).
+- **Q2 — What are the dominant temporal patterns?** A dominant daily cycle (Kruskal-Wallis by hour H = 8842.5), a significant weekly cycle separating weekday from weekend routines (H = 239.3), and an annual component with a winter demand peak. Autocorrelation is significant out to at least 720 lags (Ljung-Box statistics 50757, 196057 and 593902 at lags 24, 168 and 720, all p < 1e-3; computed in `src/stats_tests.py` and reproduced in the executed `01_eda` notebook).
 - **Q3 — Best paradigm versus complexity?** XGBoost wins on both axes: lowest error and lowest cost (seconds to fit, no scaling, CPU-friendly, trivially retrainable). SARIMA is a close second but requires a windowed refit; the LSTM is the most expensive and the weakest of the three. The accuracy-per-unit-complexity winner is the gradient-boosted tree.
 
 ### Hypotheses confirmed
