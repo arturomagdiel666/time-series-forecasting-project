@@ -8,6 +8,8 @@ Short-horizon (next-hour and next-day) forecasting of household electricity dema
 
 **Live dashboard:** `<RAILWAY_URL — add after deploy>`
 
+**Stack:** pandas · scikit-learn · statsmodels · XGBoost · PyTorch · MLflow · Streamlit · Plotly · pytest · GitHub Actions.
+
 ---
 
 ## 📌 Overview
@@ -17,6 +19,13 @@ Accurate short-horizon load forecasting underpins grid balancing, demand-respons
 1. Can we reliably forecast next-hour and next-day household electricity consumption?
 2. What are the dominant temporal patterns (hourly, daily, weekly, seasonal)?
 3. Which paradigm — SARIMA, gradient-boosted trees, or an LSTM — offers the best performance-to-complexity trade-off?
+
+## 🔧 Engineering highlights
+
+- **Leakage-safe pipeline** — chronological train/test split, `TimeSeriesSplit` expanding-window cross-validation, and lag/rolling features computed only after the split. Contemporaneous meter channels are excluded because `Global_intensity` is a near-linear proxy of the target.
+- **Rigorous evaluation** — MAE-primary alongside RMSE/MAPE/sMAPE/MASE, residual diagnostics, and per-hour/day/month error analysis across 7 models and 2 horizons.
+- **Reproducible** — pinned Python 3.12 environment, global seed 42, MLflow experiment tracking, and a 22-test pytest suite that runs in GitHub Actions on synthetic fixtures (never the real dataset).
+- **Deployable** — a 7-page Streamlit + Plotly dashboard that serves the serialized model and deploys to Railway from the committed artifacts alone.
 
 ## 📊 Key results
 
@@ -99,7 +108,8 @@ pip install -r requirements.txt
 **Option B — automated.** The loader downloads from Kaggle and verifies the file against a hardcoded SHA-256:
 
 ```bash
-python -m venv .venv && .venv/Scripts/activate
+python -m venv .venv
+.venv/Scripts/activate        # Windows;  source .venv/bin/activate on Linux/macOS
 pip install -r requirements.txt
 python scripts/download_data.py
 ```
