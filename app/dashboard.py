@@ -7,6 +7,7 @@ as the Railway deployment. All paths resolve from the project root.
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -28,6 +29,7 @@ PREDICTIONS_DIR = PROCESSED / "predictions"
 EDA_FIGURES = PROJECT_ROOT / "reports" / "figures" / "eda"
 MODEL_FIGURES = PROJECT_ROOT / "reports" / "figures" / "modeling"
 REPORT_PATH = PROJECT_ROOT / "reports" / "report.md"
+STATS_ARTIFACT = PROJECT_ROOT / "reports" / "stats_results.json"
 
 TARGET = "Global_active_power"
 
@@ -97,20 +99,27 @@ def load_test_matrices() -> tuple[pd.DataFrame, pd.Series, pd.DataFrame]:
 
 
 @st.cache_data(show_spinner=False)
-def compute_stats() -> dict[str, float]:
-    """Recompute the Block A hypothesis statistics (cached; STL reuses figures)."""
-    series = load_hourly()[TARGET]
-    kw_hour = stats_tests.kruskal_by(series, "hour")
-    kw_dow = stats_tests.kruskal_by(series, "day_of_week")
-    stationarity = stats_tests.stationarity_raw_and_differenced(series)
-    return {
-        "kw_hour_h": kw_hour.statistic,
-        "kw_hour_p": kw_hour.pvalue,
-        "kw_dow_h": kw_dow.statistic,
-        "kw_dow_p": kw_dow.pvalue,
-        "raw": stationarity["raw"],
-        "diff": stationarity["seasonal_diff"],
-    }
+def load_stats_artifact() -> dict[str, object] | None:
+    """Load the precomputed statistical results, or None if the artifact is absent.
+
+    The heavy ADF/KPSS/Kruskal/Ljung-Box tests are precomputed once by
+    scripts/precompute_stats.py into reports/stats_results.json (committed), so the
+    page renders instantly instead of recomputing over the full series on load.
+    """
+    if STATS_ARTIFACT.exists():
+        return json.loads(STATS_ARTIFACT.read_text(encoding="utf-8"))
+    return None
+
+
+@st.cache_data(show_spinner=False)
+def compute_stats_live() -> dict[str, object]:
+    """Fallback used only when the committed artifact is missing.
+
+    Recomputes the exact same summary via the shared stats_tests.summarize(), so
+    the numbers are identical to the artifact. Kept as a safety net; the normal
+    render path never calls this.
+    """
+    return stats_tests.summarize(load_hourly()[TARGET])
 
 
 @st.cache_data(show_spinner=False)
@@ -229,25 +238,37 @@ def page_exploration() -> None:
 
 def page_stats() -> None:
     st.title("Statistical Analysis 📊")
-    stats = compute_stats()
 
+    # Read the precomputed artifact; only recompute (slowly) if it is missing, so
+    # the deployed page never hangs on live statistical tests.
+    stats = load_stats_artifact()
+    if stats is None:
+        st.info(
+            "Precomputed results not found; computing the statistical tests live. "
+            "Run `python scripts/precompute_stats.py` to generate the artifact."
+        )
+        with st.spinner("Running statistical tests over the full series…"):
+            stats = compute_stats_live()
+
+    kw = stats["kruskal"]
     st.subheader("H1 - Weekly (and daily) seasonality")
     st.markdown(
-        f"Kruskal-Wallis by hour: **H = {stats['kw_hour_h']:.0f}**, "
-        f"p = {stats['kw_hour_p']:.1e}. "
-        f"By day-of-week: **H = {stats['kw_dow_h']:.0f}**, p = {stats['kw_dow_p']:.1e}. "
+        f"Kruskal-Wallis by hour: **H = {kw['hour']['statistic']:.0f}**, "
+        f"p = {kw['hour']['pvalue']:.1e}. "
+        f"By day-of-week: **H = {kw['day_of_week']['statistic']:.0f}**, "
+        f"p = {kw['day_of_week']['pvalue']:.1e}. "
         "Both reject equal distributions, so daily and weekly seasonality are "
         "significant. **H1 supported.**"
     )
 
     st.subheader("H2 - Stationarity")
-    raw, diff = stats["raw"], stats["diff"]
+    raw, diff = stats["stationarity"]["raw"], stats["stationarity"]["seasonal_diff"]
     table = pd.DataFrame(
         {
             "series": ["raw", "seasonal diff (lag-24)"],
-            "ADF p-value": [raw.adf_pvalue, diff.adf_pvalue],
-            "KPSS p-value": [raw.kpss_pvalue, diff.kpss_pvalue],
-            "verdict": [raw.verdict, diff.verdict],
+            "ADF p-value": [raw["adf_pvalue"], diff["adf_pvalue"]],
+            "KPSS p-value": [raw["kpss_pvalue"], diff["kpss_pvalue"]],
+            "verdict": [raw["verdict"], diff["verdict"]],
         }
     )
     st.dataframe(table, width="stretch", hide_index=True)
@@ -257,6 +278,16 @@ def page_stats() -> None:
     )
 
     st.subheader("Autocorrelation and decomposition")
+    # Ljung-Box (precomputed): autocorrelation stays highly significant far out,
+    # motivating the seasonal lags used downstream.
+    ljung = pd.DataFrame(stats["ljung_box"]["results"]).rename(
+        columns={"lag": "lag", "statistic": "Ljung-Box Q", "pvalue": "p-value"}
+    )
+    st.markdown(
+        "Ljung-Box test for autocorrelation at seasonal lags — all reject the "
+        "no-autocorrelation null (p ≈ 0):"
+    )
+    st.dataframe(ljung, width="stretch", hide_index=True)
     show_image(EDA_FIGURES / "05_acf_pacf.png", "ACF and PACF (up to 168 lags)")
     col1, col2 = st.columns(2)
     with col1:

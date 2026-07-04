@@ -113,3 +113,70 @@ def kruskal_by(series: pd.Series, factor: str) -> KruskalResult:
 def ljung_box(series: pd.Series, lags: list[int] = LJUNG_BOX_LAGS) -> pd.DataFrame:
     """Ljung-Box test for autocorrelation at the requested lags."""
     return acorr_ljungbox(series.dropna(), lags=lags, return_df=True)
+
+
+def _stationarity_dict(result: StationarityResult) -> dict[str, object]:
+    """Flatten a StationarityResult into a JSON-serializable dict."""
+    return {
+        "label": result.label,
+        "adf_stat": result.adf_stat,
+        "adf_pvalue": result.adf_pvalue,
+        "kpss_stat": result.kpss_stat,
+        "kpss_pvalue": result.kpss_pvalue,
+        "adf_stationary": result.adf_stationary,
+        "kpss_stationary": result.kpss_stationary,
+        "verdict": result.verdict,
+    }
+
+
+def _kruskal_dict(result: KruskalResult) -> dict[str, object]:
+    """Flatten a KruskalResult into a JSON-serializable dict."""
+    return {
+        "factor": result.factor,
+        "statistic": result.statistic,
+        "pvalue": result.pvalue,
+        "significant": result.significant,
+    }
+
+
+def summarize(
+    series: pd.Series,
+    period: int = SEASONAL_PERIOD,
+    ljung_lags: list[int] = LJUNG_BOX_LAGS,
+) -> dict[str, object]:
+    """Compute every statistic the dashboard reports, as a JSON-serializable dict.
+
+    This is the single source of truth for the statistical block: the precompute
+    script (scripts/precompute_stats.py) dumps it to reports/stats_results.json,
+    and the dashboard's live fallback calls it too, so the committed artifact and
+    any recomputation are guaranteed to produce identical numbers.
+    """
+    stationarity = stationarity_raw_and_differenced(series, period)
+    kw_hour = kruskal_by(series, "hour")
+    kw_dow = kruskal_by(series, "day_of_week")
+    lb = ljung_box(series, ljung_lags)
+    return {
+        "target": series.name,
+        # dropna() so the reported count matches what the tests actually consume.
+        "n_obs": int(series.dropna().shape[0]),
+        "seasonal_period": period,
+        "kruskal": {
+            "hour": _kruskal_dict(kw_hour),
+            "day_of_week": _kruskal_dict(kw_dow),
+        },
+        "stationarity": {
+            "raw": _stationarity_dict(stationarity["raw"]),
+            "seasonal_diff": _stationarity_dict(stationarity["seasonal_diff"]),
+        },
+        "ljung_box": {
+            "lags": list(ljung_lags),
+            "results": [
+                {
+                    "lag": int(lag),
+                    "statistic": float(lb.loc[lag, "lb_stat"]),
+                    "pvalue": float(lb.loc[lag, "lb_pvalue"]),
+                }
+                for lag in ljung_lags
+            ],
+        },
+    }

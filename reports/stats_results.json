@@ -1,0 +1,65 @@
+{
+  "target": "Global_active_power",
+  "n_obs": 34589,
+  "seasonal_period": 24,
+  "kruskal": {
+    "hour": {
+      "factor": "hour",
+      "statistic": 8842.5078125,
+      "pvalue": 0.0,
+      "significant": true
+    },
+    "day_of_week": {
+      "factor": "day_of_week",
+      "statistic": 239.28125,
+      "pvalue": 0.0,
+      "significant": true
+    }
+  },
+  "stationarity": {
+    "raw": {
+      "label": "raw",
+      "adf_stat": -14.369003115164547,
+      "adf_pvalue": 9.56439329930824e-27,
+      "kpss_stat": 1.0512342619749926,
+      "kpss_pvalue": 0.01,
+      "adf_stationary": true,
+      "kpss_stationary": false,
+      "verdict": "inconclusive"
+    },
+    "seasonal_diff": {
+      "label": "seasonal_diff_24",
+      "adf_stat": -41.14109459639932,
+      "adf_pvalue": 0.0,
+      "kpss_stat": 0.007775362779112427,
+      "kpss_pvalue": 0.1,
+      "adf_stationary": true,
+      "kpss_stationary": true,
+      "verdict": "stationary"
+    }
+  },
+  "ljung_box": {
+    "lags": [
+      24,
+      168,
+      720
+    ],
+    "results": [
+      {
+        "lag": 24,
+        "statistic": 50757.386840528496,
+        "pvalue": 0.0
+      },
+      {
+        "lag": 168,
+        "statistic": 196057.03293867313,
+        "pvalue": 0.0
+      },
+      {
+        "lag": 720,
+        "statistic": 593901.9649161157,
+        "pvalue": 0.0
+      }
+    ]
+  }
+}
